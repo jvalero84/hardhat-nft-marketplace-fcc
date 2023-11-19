@@ -35,6 +35,7 @@ module.exports = {
             //   },
             saveDeployments: true,
             chainId: 11155111,
+            blockConfirmations: 6,
         },
         /* mainnet: {
             url: MAINNET_RPC_URL,
@@ -44,12 +45,14 @@ module.exports = {
             //   },
             saveDeployments: true,
             chainId: 1,
+            blockConfirmations: 6,
         },
         polygon: {
             url: POLYGON_MAINNET_RPC_URL,
             accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
             saveDeployments: true,
             chainId: 137,
+            blockConfirmations: 6,
         }, */
     },
     etherscan: {

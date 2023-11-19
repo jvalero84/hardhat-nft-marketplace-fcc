@@ -9,6 +9,8 @@ error NftMarketplace__NotOwner();
 error NftMarketplace__AlreadyListed(address nftAddress, uint256 tokenId);
 error NftMarketplace__NotListed(address nftAddress, uint256 tokenId);
 error NftMarketplace__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
+error NftMarketplace__NoProceeds();
+error NftMarketplace__TransferFailed();
 
 contract NftMarketplace {
     struct Listing {
@@ -22,6 +24,15 @@ contract NftMarketplace {
         uint256 indexed tokenId,
         uint256 price
     );
+
+    event ItemBought(
+        address indexed buyer,
+        address indexed nftAddress,
+        uint256 indexed tokenId,
+        uint256 price
+    );
+
+    event ItemCanceled(address indexed seller, address indexed nftAddress, uint256 indexed tokenId);
 
     // NFT Contract address --> NFT tokenID --> Listing
     mapping(address => mapping(uint256 => Listing)) private s_listings;
@@ -112,11 +123,56 @@ contract NftMarketplace {
         // Could just send the money...
         // https://fravoll.github.io/solidity-patterns/pull_over_push.html
         // We need to de-list the item..
-        delete(s_listings[nftAddress][tokenId]);
-        IERC721(nftAddress).transferFrom(listedItem.seller, msg.sender, tokenId);
+        delete (s_listings[nftAddress][tokenId]);
 
+        // better to use safeTransferFrom instead of transferFrom as it does some extra checks
+        // (throws is from not approved to transfer this NFT, if _to is the zero address, etc.)
+        IERC721(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId);
+        // check to make sure the NFT was transfered.
+        emit ItemBought(msg.sender, nftAddress, tokenId, listedItem.price);
+    }
 
-        listedItem.seller = msg.sender;
+    function cancelListing(
+        address nftAddress,
+        uint256 tokenId
+    ) external isOwner(nftAddress, tokenId, msg.sender) isListed(nftAddress, tokenId) {
+        delete (s_listings[nftAddress][tokenId]);
+        emit ItemCanceled(msg.sender, nftAddress, tokenId);
+    }
 
+    function updateListing(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 newPrice
+    ) external isListed(nftAddress, tokenId) isOwner(nftAddress, tokenId, msg.sender) {
+        s_listings[nftAddress][tokenId].price = newPrice;
+        emit ItemListed(msg.sender, nftAddress, tokenId, newPrice); // We could actually emit a new event updateListing but ultimately we consider updating the price be same as re-listing the item, so we can reuse the event.
+    }
+
+    function withdrawProceeds() external {
+        uint256 proceeds = s_proceeds[msg.sender];
+        if (proceeds <= 0) {
+            revert NftMarketplace__NoProceeds();
+        }
+        s_proceeds[msg.sender] = 0;
+        (bool success, ) = payable(msg.sender).call{value: proceeds}("");
+        if (!success) {
+            revert NftMarketplace__TransferFailed();
+        }
+    }
+
+    //////////////////////
+    // Getter Functions //
+    //////////////////////
+
+    function getListing(
+        address nftAddress,
+        uint256 tokenId
+    ) external view returns (Listing memory) {
+        return s_listings[nftAddress][tokenId];
+    }
+
+    function getProceeds(address seller) external view returns (uint256) {
+        return s_proceeds[seller];
     }
 }
