@@ -2,6 +2,7 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 error NftMarketplace__PriceMustBeAboveZero();
 error NftMarketplace__NotApprovedForMarketplace();
@@ -12,7 +13,7 @@ error NftMarketplace__PriceNotMet(address nftAddress, uint256 tokenId, uint256 p
 error NftMarketplace__NoProceeds();
 error NftMarketplace__TransferFailed();
 
-contract NftMarketplace {
+contract NftMarketplace is ReentrancyGuard {
     struct Listing {
         uint256 price;
         address seller;
@@ -114,7 +115,7 @@ contract NftMarketplace {
     function buyItem(
         address nftAddress,
         uint256 tokenId
-    ) external payable isListed(nftAddress, tokenId) {
+    ) external payable isListed(nftAddress, tokenId) nonReentrant {
         Listing memory listedItem = s_listings[nftAddress][tokenId];
         if (msg.value < listedItem.price) {
             revert NftMarketplace__PriceNotMet(nftAddress, tokenId, listedItem.price);
@@ -144,7 +145,11 @@ contract NftMarketplace {
         address nftAddress,
         uint256 tokenId,
         uint256 newPrice
-    ) external isListed(nftAddress, tokenId) isOwner(nftAddress, tokenId, msg.sender) {
+    ) external isListed(nftAddress, tokenId) isOwner(nftAddress, tokenId, msg.sender) nonReentrant {
+        //We should check the value of `newPrice` and revert if it's below zero (like we also check in `listItem()`)
+        if (newPrice <= 0) {
+            revert NftMarketplace__PriceMustBeAboveZero();
+        }
         s_listings[nftAddress][tokenId].price = newPrice;
         emit ItemListed(msg.sender, nftAddress, tokenId, newPrice); // We could actually emit a new event updateListing but ultimately we consider updating the price be same as re-listing the item, so we can reuse the event.
     }
